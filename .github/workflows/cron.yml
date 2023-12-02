@@ -1,0 +1,49 @@
+name: Update new data
+
+on:
+  push:
+  schedule:
+    - cron: "30 14,18 * * *"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python 3.7
+      uses: actions/setup-python@v1
+      with:
+        python-version: '3.7'
+    - name: Cache pip
+      uses: actions/cache@v1
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+          ${{ runner.os }}-
+    - name: Install dependencies
+      run: pip install -r requirements.txt
+    - name: Decrypt files
+      run: |
+        openssl aes-256-cbc -md sha512 -d -in data.csv.enc -out data.csv -k $KEY
+        openssl aes-256-cbc -md sha512 -d -in usernames.csv.enc -out usernames.csv -k $KEY
+      env:
+        KEY: ${{ secrets.OPENSSL_KEY }}
+    - name: Run main
+      run: python main.py
+      env:
+        DOMAIN: ${{ secrets.DOMAIN }}
+    - name: Encrypt files
+      run: |
+        openssl aes-256-cbc -md sha512 -e -in data.csv -out data.csv.enc -k $KEY
+      env:
+        KEY: ${{ secrets.OPENSSL_KEY }}
+    - name: Commit files
+      run: |
+        git config --local user.email "actions@github.com"
+        git config --local user.name "GitHub Actions"
+        git add .
+        git commit -m "Add daily data"
+    - name: Push changes
+      run: git push origin master
